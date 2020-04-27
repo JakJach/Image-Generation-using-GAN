@@ -2,58 +2,65 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import transforms
 import torch.optim as optim
 
+# nasze paczki
 import image_treatment
 import GAN
 
 
-dataset='wiki'
-data_dir='C:\Studia\S8\Age-cGAN\DATA\wiki_crop'
-bins = [18, 29, 39, 49, 59]
-img_size = 64
-batch_size = 128
-#num_workers = 0
+dataset = 'wiki'
+data_dir = 'C:\Studia\S8\Age-cGAN\DATA\wiki_crop'
 
+# granice przedziałów wiekowych
+bins = [18, 29, 39, 49, 59]
+
+# rozmiar obrazka
+img_size = 64
+
+# wielkość paczki
+batch_size = 128
+
+# kombinacja zmieniania rozmiaru obrazu i konwerscji do tensora
 tfms = transforms.Compose([image_treatment.Resize((img_size, img_size)),
                            image_treatment.ToTensor()])
 
+# załadowanie datasetu i transformacja
 train_dataset = image_treatment.ImageAgeDataset(dataset, data_dir, transform=tfms)
 
-# build DataLoaders
+# użycie loadera PyTorcha
 train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size)
-
 iter(train_loader).next()
 
-plt.imshow(train_dataset[0]['image'].numpy().transpose(1,2,0))
-
+# wyświetlenie kilku przykładowych obrazków w celu sprawdzenia
+plt.imshow(train_dataset[21]['image'].numpy().transpose(1,2,0))
+plt.imshow(train_dataset[37]['image'].numpy().transpose(1,2,0))
+plt.imshow(train_dataset[420]['image'].numpy().transpose(1,2,0))
 plt.imshow(train_dataset[609]['image'].numpy().transpose(1,2,0))
 
-# obtain one batch of training images
+# pobranie paczki danych z datasetu
 dataiter = iter(train_loader)
 data = dataiter.next()
 images, labels = data['image'], data['age']
 
-# plot the images in the batch, along with the corresponding labels
+# wyświetlenie obrazków z pobranego batcha
 fig = plt.figure(figsize=(25, 4))
 plot_size=20
 
 for idx in np.arange(plot_size):
     ax = fig.add_subplot(2, plot_size/2, idx+1, xticks=[], yticks=[])
     ax.imshow(np.transpose(images[idx], (1, 2, 0)))
-    # print out the correct label for each image
-    # .item() gets the value contained in a Tensor
     ax.set_title(str(labels[idx].item()))
 
 
-# define hyperparams
+# parametry obu sieci
 conv_dim = 64
 z_size = 100
-y_size = 6 # no. of age classes
+y_size = 6
 
-# define discriminator and generator
+# stworzenie obu sieci
 D = GAN.Discriminator(y_size, conv_dim)
 G = GAN.Generator(z_size, y_size, conv_dim)
 
@@ -61,41 +68,39 @@ print(D)
 print('---')
 print(G)
 
-# params
+# parametry optymalizatorów - oba stworzone dla takich samych parametrów
 lr = 0.0002
-beta1=0.5
-beta2=0.999 # default value
+beta1 = 0.5
+beta2 = 0.999
 
-# Create optimizers for the discriminator and generator
+# stworzenie optymalizatorów
 d_optimizer = optim.Adam(D.parameters(), lr, [beta1, beta2])
 g_optimizer = optim.Adam(G.parameters(), lr, [beta1, beta2])
 
 
-
 #%%time
 
-root_dir = r'C:\Studia\S8\Age-cGAN\results'
+# nazwa modelu
 model = 'GAN_1'
+root_dir = r'C:\Studia\S8\Age-cGAN\results'
 os.makedirs(root_dir, exist_ok=True)
 
-# move models to GPU, if available
+# sprawdzenie możliwości wykonania na GPU
 device = GAN.device
 G.to(device)
 D.to(device)
 
-import pickle as pkl
-
-# training hyperparams
+# parametry uczenia
 num_epochs = 10
-
-# keep track of loss and generated, "fake" samples
-samples = []
-losses = []
-
 print_every = 300
 
-# Get some fixed data for sampling. These are images that are held
-# constant throughout training, and allow us to inspect the model's performance
+# lista, w której zapisane zostaną wygenerowane "fałszywe" obrazy
+samples = []
+
+# lista wartości strat procesu uczenia
+losses = []
+
+# przyszykowanie wygenerowanych danych do kontrolowania procesu
 sample_size=16
 fixed_z = np.random.uniform(-1, 1, size=(sample_size, z_size))
 fixed_z = torch.from_numpy(fixed_z).float()
@@ -103,100 +108,96 @@ fixed_y = np.random.randint(len(bins), size=sample_size)
 fixed_y = fixed_y.reshape(-1,1)
 fixed_y = torch.zeros(sample_size, len(bins)+1).scatter_(1, torch.LongTensor(fixed_y), 1)
 
-# train the network
+# proces uczenia
 for epoch in range(num_epochs):
 
     for batch_i, batch in enumerate(train_loader):
 
         batch_size = batch['image'].size(0)
 
-        # important rescaling image step
+        # skalowanie wszystkich obrazów z paczki
         real_images = image_treatment.scale(batch['image'])
 
-        # one-hot age
+        # wyznaczenie wektorów jednostkowych dla paczki
         ages = image_treatment.one_hot(batch['age'], bins)
 
         # ============================================
-        #            TRAIN THE DISCRIMINATOR
+        #               DYSKRYMINATOR
         # ============================================
 
         d_optimizer.zero_grad()
 
-        # 1. Train with real images
+        # I. Trening na prawdziwych obrazkach
 
-        # Compute the discriminator losses on real images
+        # obliczenie strat dla uczenia przy prawdziwych obrazkach
         real_images = real_images.to(device)
         ages = ages.to(device)
-
         D_real = D(real_images, ages)
         d_real_loss = GAN.real_loss(D_real)
 
-        # 2. Train with fake images
+        # II. Trening na fałszywych obrazkach
 
-        # Generate fake images
+        # generacja (używamy genratora!)
         z = np.random.uniform(-1, 1, size=(batch_size, z_size))
         z = torch.from_numpy(z).float()
-        # move x to GPU, if available
         z = z.to(device)
-        # if train_on_gpu:
-        #    z = z.cuda()
         fake_images = G(z, ages)
 
-        # Compute the discriminator losses on fake images
+        # obliczenie strat dla uczenia przy fałszywych obrazkach
         D_fake = D(fake_images, ages)
         d_fake_loss = GAN.fake_loss(D_fake)
 
-        # add up loss and perform backprop
+        # dodanie strat i propagacja wsteczna
         d_loss = d_real_loss + d_fake_loss
         d_loss.backward()
         d_optimizer.step()
 
         # =========================================
-        #            TRAIN THE GENERATOR
+        #               GENERATOR
         # =========================================
         g_optimizer.zero_grad()
 
-        # 1. Train with fake images and flipped labels
+        # I. Trening z fałszywymi obrazami i odwróconymi labelami
 
-        # Generate fake images
+        # generacja szumu
         z = np.random.uniform(-1, 1, size=(batch_size, z_size))
         z = torch.from_numpy(z).float()
         z = z.to(device)
         fake_images = G(z, ages)
 
-        # Compute the discriminator losses on fake images
-        # using flipped labels!
+        # obliczenie strat dyskryminatora dla fałszywych obrazków z odwróconymi labelami
         D_fake = D(fake_images, ages)
-        g_loss = GAN.real_loss(D_fake)  # use real loss to flip labels
+        g_loss = GAN.real_loss(D_fake)
 
-        # perform backprop
+        # propagacja wsteczna
         g_loss.backward()
         g_optimizer.step()
 
-        # Print some loss stats
+        # wyświetlenie wyników (strat) tej epoki
         if batch_i % print_every == 0:
-            # append discriminator loss and generator loss
+            # dodanie strat do listy
             losses.append((d_loss.item(), g_loss.item()))
-            # print discriminator and generator loss
+
             print('Epoch [{:5d}/{:5d}] | d_loss: {:6.4f} | g_loss: {:6.4f}'.format(
                 epoch + 1, num_epochs, d_loss.item(), g_loss.item()))
 
-    ## AFTER EACH EPOCH##
-    # generate and save sample, fake images
+    # Po każdej epoce generujemy nowe sample i zapisujemy je w liście
+
+    # generacja
     G.eval()  # for generating samples
     fixed_z = fixed_z.to(device)
     fixed_y = fixed_y.to(device)
     samples_z = G(fixed_z, fixed_y)
     samples.append(samples_z)
-    G.train()  # back to training mode
+    # trening generatora
+    G.train()
 
-    # Save checkpoint
     GAN.checkpoint(G, D, epoch, model, root_dir)
 
-# Save training generator samples
+# zapis wygenerowanych sampli
 GAN.save_samples_ages(samples, fixed_y, model, root_dir)
 
-
+# wykres wyników sieci
 fig, ax = plt.subplots()
 losses = np.array(losses)
 plt.plot(losses.T[0], label='Discriminator', alpha=0.5)
@@ -204,6 +205,6 @@ plt.plot(losses.T[1], label='Generator', alpha=0.5)
 plt.title("Training Losses")
 plt.legend()
 
-
+# wyświetlenie wygenerowanych sampli
 fixed_y_ages = GAN.oh_to_class(fixed_y)
 _ = image_treatment.view_samples(-1, samples, fixed_y_ages)

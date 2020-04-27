@@ -6,7 +6,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
-
+# nasze paczki
 import load_data
 
 
@@ -21,12 +21,14 @@ def scale(x, feature_range=(-1, 1)):
     x = x * (x_max - x_min) + x_min
     return x
 
+
 # granice przedziałów wiekowych
 bins = [18, 29, 39, 49, 59]
 
+
 def one_hot(x, bins):
     '''
-    Skalowanie tensora na tensora jednorazowy
+    Skalowanie tensora na tensor jednorazowy
     :param x:       tensor
     :param bins:    zakresy przedziałów wiekowych
     '''
@@ -54,6 +56,7 @@ class ImageAgeDataset(Dataset):
         :param data_dir:    ściezka dostępu do datasetu
         :param transform:   opcjonalne przekształcenie
         '''
+
         self.data_dir = data_dir
         self.full_path, self.age = load_data.load_data(dataset, data_dir)
         self.transform = transform
@@ -65,6 +68,7 @@ class ImageAgeDataset(Dataset):
         '''
         zwraca słownik w postaci {obraz, wiek} (otwiera obraz!!!)
         '''
+
         image = Image.open(os.path.join(self.data_dir, self.full_path[idx]))
         age = self.age[idx]
         sample = {'image': image, 'age': age}
@@ -82,6 +86,7 @@ class Resize(object):
         '''
         :param output_size: para (wysokość, szerokość), do jakiej zmieniamy rozmiar obrazu
         '''
+
         assert isinstance(output_size, (int, tuple))
         self.output_size = output_size
 
@@ -89,6 +94,7 @@ class Resize(object):
         '''
         :param sample:  para {obraz,wiek}
         '''
+
         image, age = sample['image'], sample['age']
 
         # gotowa funkcja PyTorcha do zmiany wymiarów obrazu
