@@ -10,38 +10,49 @@ import matplotlib.pyplot as plt
 import load_data
 
 
-# helper scale function
 def scale(x, feature_range=(-1, 1)):
-    ''' Scale takes in an image x and returns that image, scaled
-       with a feature_range of pixel values from -1 to 1.
-       This function assumes that the input x is already scaled from 0-1.'''
-    # assume x is scaled to (0, 1)
-    # scale to feature_range and return scaled x
-    min, max = feature_range
-    x = x * (max - min) + min
+    '''
+    Przeskalowanie pikseli obrazu x z zakresu (0,1) do (-1,1)
+    :param x:               obraz
+    :param feature_range:   docelowy zakres skalowania
+    '''
+
+    x_min, x_max = feature_range
+    x = x * (x_max - x_min) + x_min
     return x
 
-# helper one-hot function
+# granice przedziałów wiekowych
 bins = [18, 29, 39, 49, 59]
+
 def one_hot(x, bins):
     '''
-    Convert tensor x to one-hot tensor
+    Skalowanie tensora na tensora jednorazowy
+    :param x:       tensor
+    :param bins:    zakresy przedziałów wiekowych
     '''
+
+    # sprawdzenie, w którym przedziale jest każdy element tensora
     x = x.numpy()
-    idxs = np.digitize(x, bins, right=True)
-    idxs = idxs.reshape(-1,1)
-    z = torch.zeros(len(x), len(bins)+1).scatter_(1, torch.tensor(idxs), 1)
+    indices = np.digitize(x, bins, right=True)
+    indices = indices.reshape(-1,1)
+
+    # na podstawie indeksu zwraca macierz - wektor wektorów jednorazowych z 1 na pozycji odpowiedniego przedziału
+    z = torch.zeros(len(x), len(bins)+1).scatter_(1, torch.tensor(indices), 1)
     return z
 
 
 class ImageAgeDataset(Dataset):
-    '''Image and corresponding age Dataset'''
+
+    '''
+    element obraz - wiek osoby na obrazie
+    uzyskany na podst. datasetu
+    '''
 
     def __init__(self, dataset, data_dir, transform=None):
         '''
-        :param dataset: Dataset name.
-        :param data_dir: Directory with all the images.
-        :param transform: Optional transform to be applied on sample
+        :param dataset:     nazwa datasetu
+        :param data_dir:    ściezka dostępu do datasetu
+        :param transform:   opcjonalne przekształcenie
         '''
         self.data_dir = data_dir
         self.full_path, self.age = load_data.load_data(dataset, data_dir)
@@ -51,6 +62,9 @@ class ImageAgeDataset(Dataset):
         return len(self.age)
 
     def __getitem__(self, idx):
+        '''
+        zwraca słownik w postaci {obraz, wiek} (otwiera obraz!!!)
+        '''
         image = Image.open(os.path.join(self.data_dir, self.full_path[idx]))
         age = self.age[idx]
         sample = {'image': image, 'age': age}
@@ -60,32 +74,57 @@ class ImageAgeDataset(Dataset):
 
 
 class Resize(object):
-    '''Resize the input PIL Image to the given size.'''
+    '''
+    zmiana wymiaru obrazu
+    '''
 
     def __init__(self, output_size):
+        '''
+        :param output_size: para (wysokość, szerokość), do jakiej zmieniamy rozmiar obrazu
+        '''
         assert isinstance(output_size, (int, tuple))
         self.output_size = output_size
 
     def __call__(self, sample):
+        '''
+        :param sample:  para {obraz,wiek}
+        '''
         image, age = sample['image'], sample['age']
+
+        # gotowa funkcja PyTorcha do zmiany wymiarów obrazu
         image = transforms.Resize(self.output_size)(image)
         return {'image': image, 'age': age}
 
 
 class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
+    '''
+    konwerscja obrazów z tablic np na tensory PyTorcha
+    '''
 
     def __call__(self, sample):
+
+        '''
+        :param sample:  para {obraz, wiek}
+        '''
+
         image, age = sample['image'], sample['age']
         image = transforms.ToTensor()(image)
-        # expand dept from 1 to 3 channels for gray images
+
+        # jeśli obraz jest w skali szarości - rozszerzamy go na 3 warstwy
         if image.size()[0] == 1:
             image = image.expand(3, -1, -1)
+
         return {'image': image, 'age': age}
 
 
-# helper function for viewing a list of passed in sample images
+
 def view_samples(epoch, samples, ages):
+    '''
+    wyświetlanie kilku obrazów w jednej figurze
+    :param epoch:   numer epoki, po której mają być wyświetlone obrazy (dla -1 najnowsza wersja)
+    :param samples: lista wyników sampli po każdej z epok uczenia
+    :param ages:    lista lat poszczególnych sampli
+    '''
     fig, axes = plt.subplots(figsize=(16,4), nrows=2, ncols=8, sharey=True, sharex=True)
     for ax, img, age in zip(axes.flatten(), samples[epoch], ages):
         img = img.detach().cpu().numpy()

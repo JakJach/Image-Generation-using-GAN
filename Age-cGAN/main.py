@@ -86,7 +86,7 @@ D.to(device)
 import pickle as pkl
 
 # training hyperparams
-num_epochs = 0
+num_epochs = 10
 
 # keep track of loss and generated, "fake" samples
 samples = []
