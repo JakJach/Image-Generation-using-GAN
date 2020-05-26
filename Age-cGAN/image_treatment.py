@@ -140,3 +140,4 @@ def view_samples(epoch, samples, ages):
         ax.yaxis.set_visible(False)
         ax.set_title(age)
         im = ax.imshow(img.reshape((64,64,3)))
+    # plt.show()

@@ -7,7 +7,6 @@ import torch.nn.functional as F
 
 # jeśli dostępna jest karta graficzna, to ona wykona obliczenia, jeśli nie, CPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 # Funkcje pomocnicze
 
 
